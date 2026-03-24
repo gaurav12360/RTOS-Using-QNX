@@ -1,154 +1,86 @@
-# Experiment 402: Repeating Timer using Pulse Messages in QNX
+# Experiment 401: Interrupt Handling with Counter in QNX
 
 ## Aim
 
-To implement a **repeating timer in QNX** that periodically wakes a thread by sending **pulse messages**.
+To implement **hardware interrupt handling in QNX** and maintain a **count of the number of interrupts received**.
 
 ---
 
 ## Objective
 
-* To understand **timer creation in QNX** using `timer_create()`.
-* To learn how **pulse events are generated using SIGEV_PULSE_INIT()`.
-* To demonstrate **periodic task execution using a repeating timer**.
+* To understand **interrupt handling in QNX Neutrino RTOS**.
+* To use **InterruptAttach()** and **InterruptWait()** functions.
+* To maintain a **counter to track the number of interrupts received**.
 
 ---
 
 ## Problem Statement
 
-Develop a QNX program that creates a **repeating timer**.
-When the timer expires, it sends a **pulse message to a channel**.
-The program waits in a `MsgReceive()` loop and processes the pulse whenever the timer expires.
-
-The timer should:
-
-* Trigger the **first event after 5 seconds**.
-* Then **repeat every 1.5 seconds**.
+Develop a QNX program that **attaches to a hardware interrupt (e.g., keyboard interrupt)** and waits for the interrupt to occur.
+Each time the interrupt occurs, the program should **display a message and increment a counter showing how many times the interrupt has been received**.
 
 ---
 
 # Algorithm
 
 1. Start the program.
-2. Declare variables for:
+2. Declare a variable for the **interrupt number (IRQ)**.
+3. Declare a variable to store the **interrupt attachment ID**.
+4. Declare and initialize a **counter variable to 0**.
+5. Display a message indicating the start of the interrupt example.
+6. Attach to the interrupt using `InterruptAttach()`.
+7. If interrupt attachment fails:
 
-   * Channel ID
-   * Connection ID
-   * Timer ID
-   * Timer specification
-   * Message structure for pulses.
-3. Create a **channel using `ChannelCreate()`**.
-4. Attach a **connection to the channel using `ConnectAttach()`**.
-5. Initialize a **pulse event using `SIGEV_PULSE_INIT()`**.
-6. Create a **timer using `timer_create()`**.
-7. Configure the timer using `itimerspec`:
-
-   * Set first expiry to **5 seconds**.
-   * Set repeating interval to **1.5 seconds**.
-8. Start the timer using `timer_settime()`.
+   * Display the error message.
+   * Terminate the program.
+8. Display a message indicating successful interrupt attachment.
 9. Enter an infinite loop.
-10. Wait for incoming messages using `MsgReceive()`.
-11. If a pulse message is received:
+10. Wait for the interrupt using `InterruptWait()`.
+11. When the interrupt occurs:
 
-    * Check the pulse code.
-12. If the pulse code matches the timer event:
-
-    * Print **"Timer expired – pulse received"**.
-13. Continue waiting for the next timer pulse.
+    * Print **"Interrupt received! Count is X"**.
+12. Increment the counter value.
+13. Continue waiting for the next interrupt.
 
 ---
 
 # Program
 
-```c id="rtm0pf"
-/*
- * reptimer.c
- */
-
-#include <stdlib.h>
+```c id="xtm12h"
 #include <stdio.h>
-#include <errno.h>
+#include <stdlib.h>
 #include <sys/neutrino.h>
-#include <sys/dispatch.h>
+#include <sys/syspage.h>
 #include <unistd.h>
-#include <signal.h>
-#include <time.h>
-#include <string.h>
-
-#define TIMER_PULSE_EVENT (_PULSE_CODE_MINAVAIL + 7)
-
-typedef union
-{
-    struct _pulse pulse;
-} message_t;
 
 int main(int argc, char *argv[])
 {
-    rcvid_t rcvid;
-    struct sigevent event;
-    int chid, coid;
-    message_t msg;
-    timer_t timerid;
-    struct itimerspec it;
+    int irq = 1;           // interrupt number (example: keyboard)
+    int id;
+    int count = 0;
 
-    chid = ChannelCreate(_NTO_CHF_PRIVATE);
-    if (chid == -1)
+    printf("Simple Interrupt \n");
+
+    /* Attach interrupt */
+    id = InterruptAttach(irq, NULL, NULL, 0, 0);
+    if (id == -1)
     {
-        fprintf(stderr, "ChannelCreate failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+        perror("InterruptAttach");
+        return EXIT_FAILURE;
     }
 
-    coid = ConnectAttach(0, 0, chid, _NTO_SIDE_CHANNEL, 0);
-    if (coid == -1)
-    {
-        fprintf(stderr, "ConnectAttach failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    SIGEV_PULSE_INIT(&event, coid, 10, TIMER_PULSE_EVENT, 0);
-
-    if (timer_create(CLOCK_MONOTONIC, &event, &timerid) == -1)
-    {
-        perror("timer_create");
-        exit(EXIT_FAILURE);
-    }
-
-    it.it_value.tv_sec = 5;
-    it.it_value.tv_nsec = 0;
-
-    it.it_interval.tv_sec = 1;
-    it.it_interval.tv_nsec = 500 * 1000 * 1000;
-
-    if (timer_settime(timerid, 0, &it, NULL) == -1)
-    {
-        perror("timer_settime");
-        exit(EXIT_FAILURE);
-    }
+    printf("Attached to interrupt %d\n", irq);
 
     while (1)
     {
-        rcvid = MsgReceive(chid, &msg, sizeof(msg), NULL);
+        /* Wait for interrupt */
+        InterruptWait(0, NULL);
 
-        if (rcvid == -1)
-        {
-            fprintf(stderr, "MsgReceive failed: %s\n", strerror(errno));
-            continue;
-        }
-
-        if (rcvid == 0)
-        {
-            switch (msg.pulse.code)
-            {
-                case TIMER_PULSE_EVENT:
-                    printf("got our pulse, the timer must have expired\n");
-                    break;
-
-                default:
-                    printf("unexpected pulse code: %d\n", msg.pulse.code);
-                    break;
-            }
-        }
+        printf("Interrupt received! , Count is %d\n", count);
+        count++;
     }
+
+    return 0;
 }
 ```
 
@@ -156,24 +88,25 @@ int main(int argc, char *argv[])
 
 # Expected Output
 
-```text id="aq8s4n"
-got our pulse, the timer must have expired
-got our pulse, the timer must have expired
-got our pulse, the timer must have expired
-got our pulse, the timer must have expired
+```text id="bl34ke"
+Simple Interrupt 
+Attached to interrupt 1
+Interrupt received! , Count is 0
+Interrupt received! , Count is 1
+Interrupt received! , Count is 2
+Interrupt received! , Count is 3
+Interrupt received! , Count is 4
 ...
 ```
 
-*(The message appears every 1.5 seconds after the initial 5-second delay.)*
+*(The counter increases each time the interrupt occurs.)*
 
 ---
-
 # Output
+<img width="1078" height="311" alt="image" src="https://github.com/user-attachments/assets/aba60c11-847f-49b9-9b84-1f35b87a9807" />
 
-
----
 
 # Result
 
-Thus, a **repeating timer using pulse messages in QNX** was successfully implemented.
-The timer periodically generated pulses that were received through the **MsgReceive() loop**, demonstrating **periodic task execution in QNX**.
+Thus, the **hardware interrupt handling mechanism in QNX** was successfully implemented using `InterruptAttach()` and `InterruptWait()`.
+The program correctly detected interrupts and **maintained a counter showing the number of interrupts received**.
