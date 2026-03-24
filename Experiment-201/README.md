@@ -2,7 +2,7 @@
 
 ## Aim
 
-Write a C program to implement **process creation using fork() in QNX/Linux** and observe the behavior of **parent and child processes** when the parent terminates.
+Write a program to implement **process creation using fork() in QNX/Linux** and observe the behavior of **parent and child processes** when the parent terminates.
 
 ---
 
@@ -126,7 +126,8 @@ Child 3 running after parent exit. My PID = 1203, New Parent PID = 1
 
 # Ouput
 
----
+<img width="1072" height="295" alt="Screenshot 2026-03-14 101422" src="https://github.com/user-attachments/assets/ac3804b6-abe7-40ef-b81d-8ec677200d4e" />
+
 
 # Result
 
